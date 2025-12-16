@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin – Quiz</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0b1020;
+      color: white;
+      min-height: 100vh;
+    }
+
+    .centerWrap{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      padding: 20px;
+    }
+
+    .box {
+      background: rgba(255,255,255,0.10);
+      padding: 30px;
+      border-radius: 16px;
+      width: 320px;
+      text-align: center;
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.12);
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border-radius: 10px;
+      border: none;
+      font-size: 16px;
+      outline: none;
+    }
+
+    textarea{ min-height: 80px; resize: vertical; }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 15px;
+      border-radius: 10px;
+      border: none;
+      background: #ffd54a;
+      font-weight: bold;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .error {
+      color: #ff5a7a;
+      margin-top: 10px;
+      display: none;
+    }
+
+    /* Dashboard */
+    .dash{
+      display:none;
+      padding: 18px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+      font-size: 12px;
+      color: rgba(255,255,255,0.85);
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    @media (max-width: 900px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 12px 30px rgba(0,0,0,.25);
+    }
+
+    .card h3{ margin: 0 0 10px 0; }
+
+    .row{
+      display:flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .row > * { flex: 1; }
+
+    .small{
+      font-size: 12px;
+      color: rgba(255,255,255,0.72);
+      margin-top: 8px;
+      line-height: 1.35;
+    }
+
+    .list{
+      display:flex;
+      flex-direction:column;
+      gap: 8px;
+      max-height: 280px;
+      overflow:auto;
+      padding-right: 4px;
+    }
+
+    .qItem{
+      display:flex;
+      justify-content:space-between;
+      gap: 10px;
+      align-items:flex-start;
+      padding: 10px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+
+    .qItem b{ display:block; }
+    .miniBtn{
+      width:auto;
+      margin-top:0;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.12);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+    .danger{ border-color: rgba(255,90,122,.5); background: rgba(255,90,122,.12); }
+
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN VIEW -->
+  <div class="centerWrap" id="loginView">
+    <div class="box">
+      <h2>🎄 Admin Login</h2>
+      <p style="opacity:.8;margin-top:0">Code eingeben</p>
+
+      <input id="code" placeholder="Admin-Code">
+      <button onclick="login()">Login</button>
+
+      <div class="error" id="error">Falscher Code</div>
+
+      <div class="small">
+        Code ist aktuell fix: <b>1B2B3B</b><br>
+        (Später machen wir das sicherer.)
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="dash" id="dashView">
+    <div class="topbar">
+  <div>
+    <div style="font-size:24px;font-weight:900;">🎄 Admin Dashboard</div>
+    <div class="pill">Status: <b id="status">Lokal (noch ohne Pusher)</b></div>
+  </div>
+
+  <div style="display:flex; gap:10px; align-items:center;">
+    <div class="pill">
+      Fragen:<button onclick="startQuiz()">▶ Frage starten</button>
+<button onclick="nextQuestion()">➡ Nächste</button>
+ <b id="qCount">0</b>
+    </div>
+
+    <button onclick="toggleFullscreen()" style="width:auto;">
+      ⛶ Vollbild
+    </button>
+  </div>
+</div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>📝 Frage hinzufügen</h3>
+
+        <label class="small">Frage</label>
+        <textarea id="qText" placeholder="z.B. Wer hat die beste Weihnachtsstimmung?"></textarea>
+
+        <label class="small">Antwort A</label>
+        <input id="a0" placeholder="Antwort A">
+
+        <label class="small">Antwort B</label>
+        <input id="a1" placeholder="Antwort B">
+
+        <label class="small">Antwort C</label>
+        <input id="a2" placeholder="Antwort C">
+
+        <label class="small">Antwort D</label>
+        <input id="a3" placeholder="Antwort D">
+
+        <label class="small">Richtig (0=A, 1=B, 2=C, 3=D)</label>
+        <input id="correct" type="number" min="0" max="3" value="0">
+
+        <div class="row">
+          <button onclick="addQuestion()">Frage speichern</button>
+          <button class="miniBtn danger" onclick="clearForm()">Leeren</button>
+        </div>
+
+        <div class="small">
+          Diese Fragen speichern wir erstmal in deinem Browser (localStorage).  
+          Später senden wir sie live an die Spieler (Pusher).
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📚 Fragenliste</h3>
+        <div class="list" id="qList"></div>
+
+        <div class="row">
+          <button class="miniBtn" onclick="exportQuiz()">Export JSON</button>
+          <button class="miniBtn danger" onclick="resetAll()">Alles löschen</button>
+        </div>
+
+        <div class="small">
+          Export ist praktisch als Backup. (Wir bauen später "Raum erstellen + QR".)
+        </div>
+      </div>
+<div class="card">
+  <h3>🔑 Raum erstellen
+<div class="card">
+  <h3>👥 Beigetretene Spieler</h3>
+  <div class="small">Raum: <b id="adminRoomNow">—</b></div>
+  <div class="list" id="playerList" style="margin-top:10px"></div>
+  <div class="small" style="margin-top:10px">
+    (Lokal-Test: öffne Player in einem neuen Fenster / Inkognito und joine.)
+  </div>
+</div>
+</h3>
+
+  <button onclick="createRoom()">Neuen Raum erstellen</button>
+<button class="miniBtn" style="margin-top:10px;" onclick="startGame()">
+  ▶ Quiz starten
+</button>
+
+
+  <div class="small" style="margin-top:10px">
+    Raumcode:
+    <b id="roomCode">—</b>
+  </div>
+
+  <div id="qrWrap" style="margin-top:12px; display:none; text-align:center">
+    <canvas id="qr"></canvas>
+    <div class="small" style="margin-top:6px">
+      Spieler scannen den QR-Code
+    </div>
+  </div>
+</div>
+
+    </div>
+  </div>
+<script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+
+  <script>
+    const ADMIN_PASS = "1B2B3B";
+
+    // Quiz-Daten lokal (später via Pusher live)
+    let currentRoom = null;
+
+// Quiz-Daten lokal (später via Pusher live)
+let quiz = loadLocal("quiz") || { title: "Hauptquiz", questions: [] };
+
+
+function pollPlayers(){
+  const box = document.getElementById("playerList");
+  if (!currentRoom) {
+    box.innerHTML = `<div class="small">Noch kein Raum erstellt.</div>`;
+    return;
+  }
+  const key = "players_" + currentRoom;
+  const list = JSON.parse(localStorage.getItem(key) || "[]");
+
+  if (list.length === 0) {
+    box.innerHTML = `<div class="small">Noch niemand beigetreten.</div>`;
+    return;
+  }
+
+  box.innerHTML = "";
+  list
+    .sort((a,b)=>a.t-b.t)
+    .forEach(p=>{
+      const div = document.createElement("div");
+      div.className = "qItem";
+      div.innerHTML = `<div><b>${p.emoji} ${escapeHtml(p.name)}</b></div>`;
+      box.appendChild(div);
+    });
+}
+
+setInterval(pollPlayers, 500);
+loadLocal("quiz") || { title: "Hauptquiz", questions: [] };
+
+    function login() {
+      const code = document.getElementById("code").value.trim();
+      if (code === ADMIN_PASS) {
+        document.getElementById("error").style.display = "none";
+        document.getElementById("loginView").style.display = "none";
+        document.getElementById("dashView").style.display = "block";
+
+toggleFullscreen();
+        render();
+      } else {
+        document.getElementById("error").style.display = "block";
+      }
+    }
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
+}
+
+    function addQuestion(){
+      const text = document.getElementById("qText").value.trim();
+      const answers = [
+        document.getElementById("a0").value.trim(),
+        document.getElementById("a1").value.trim(),
+        document.getElementById("a2").value.trim(),
+        document.getElementById("a3").value.trim(),
+      ];
+      const correct = Number(document.getElementById("correct").value);
+
+      if(!text) return alert("Bitte eine Frage eingeben.");
+      if(answers.some(a => !a)) return alert("Bitte alle 4 Antworten ausfüllen.");
+      if(Number.isNaN(correct) || correct < 0 || correct > 3) return alert("Correct muss 0-3 sein.");
+
+      quiz.questions.push({ text, answers, correct });
+      saveLocal("quiz", quiz);
+      clearForm();
+      render();
+    }
+
+    function removeQuestion(idx){
+      quiz.questions.splice(idx, 1);
+      saveLocal("quiz", quiz);
+      render();
+    }
+
+    function clearForm(){
+      document.getElementById("qText").value = "";
+      document.getElementById("a0").value = "";
+      document.getElementById("a1").value = "";
+      document.getElementById("a2").value = "";
+      document.getElementById("a3").value = "";
+      document.getElementById("correct").value = "0";
+    }
+
+    function render(){
+      document.getElementById("qCount").textContent = quiz.questions.length;
+
+      const list = document.getElementById("qList");
+      list.innerHTML = "";
+
+      if(quiz.questions.length === 0){
+        list.innerHTML = `<div class="small">Noch keine Fragen. Füge links eine hinzu.</div>`;
+        return;
+      }
+
+      quiz.questions.forEach((q, idx)=>{
+        const div = document.createElement("div");
+        div.className = "qItem";
+        div.innerHTML = `
+          <div>
+            <b>${escapeHtml(q.text)}</b>
+            <div class="small">Richtig: ${["A","B","C","D"][q.correct]}</div>
+          </div>
+          <button class="miniBtn danger" onclick="removeQuestion(${idx})">Löschen</button>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function exportQuiz(){
+      const data = JSON.stringify(quiz, null, 2);
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "quiz-export.json";
+      a.click();
+
+      URL.revokeObjectURL(url);
+    }
+
+    function resetAll(){
+      if(!confirm("Wirklich ALLES löschen?")) return;
+      quiz = { title: "Hauptquiz", questions: [] };
+      saveLocal("quiz", quiz);
+      render();
+    }
+
+    function saveLocal(key, val){
+      localStorage.setItem(key, JSON.stringify(val));
+    }
+    function loadLocal(key){
+      try { return JSON.parse(localStorage.getItem(key)); }
+      catch { return null; }
+    }
+   function createRoom(){
+  const code = Math.random().toString(36).substring(2,8).toUpperCase();
+roomCode = code;
+  document.getElementById("roomCode").textContent = code;
+currentRoom = code;
+document.getElementById("adminRoomNow").textContent = currentRoom;
+
+
+  let url;
+  if (location.protocol === "file:") {
+    url = "PLAYER-LINK (online): /player/index.html?room=" + code;
+  } else {
+    url = location.origin + "/player/index.html?room=" + code;
+  }
+
+  new QRious({
+    element: document.getElementById("qr"),
+    value: url,
+    size: 220,
+    background: "white",
+    foreground: "#000"
+  });
+
+  document.getElementById("qrWrap").style.display = "block";
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => ({
+    "&":"&amp;",
+    "<":"&lt;",
+    ">":"&gt;",
+    '"':"&quot;",
+    "'":"&#39;"
+  }[m]));
+} function startGame(){
+  if (!currentRoom) return alert("Bitte erst einen Raum erstellen!");
+  localStorage.setItem("game_" + currentRoom, JSON.stringify({ started: true, t: Date.now() }));
+  alert("Startsignal gesendet ✅");
+}
+let roomCode = null;
+let currentIndex = 0;
+
+async function startQuiz() {
+  if (!roomCode) return alert("Erst 'Neuen Raum erstellen' drücken!");
+  currentIndex = 0;
+  await pushQuestion();
+}
+
+async function nextQuestion() {
+  if (!roomCode) return alert("Erst 'Neuen Raum erstellen' drücken!");
+  currentIndex++;
+  await pushQuestion();
+}
+
+async function pushQuestion() {
+  const q = quiz.questions[currentIndex];
+  if (!q) return alert("Keine (weitere) Frage vorhanden.");
+
+  await pushToRoom(roomCode, "question", {
+    index: currentIndex,
+    text: q.text,
+    answers: q.answers
+  });
+}
+
+
+const PUSHER_KEY = "DEIN_PUSHER_KEY";
+const PUSHER_CLUSTER = "DEIN_CLUSTER";
+
+const url = new URL(location.href);
+const room = url.searchParams.get("room");
+
+// Pusher verbinden
+const pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
+const channel = pusher.subscribe("room-" + room);
+
+// Event "question" empfangen
+channel.bind("question", (data) => {
+  showQuestion(data);
+});
+
+function showQuestion(data){
+  // Minimal-UI: du kannst es hübsch machen
+  document.querySelector("#statusText").textContent = "Frage " + (data.index+1);
+  document.querySelector("#questionText").textContent = data.text;
+
+  const btns = document.querySelectorAll(".answerBtn");
+  btns.forEach((b,i)=>{
+    b.textContent = data.answers[i] || "-";
+    b.disabled = false;
+  });
+}
+
+  </script>
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+</body>
+</html>
