@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Weihnachts-Quiz – Player</title>
+
+  <style>
+    :root{
+      --bg:#0b1020;
+      --card: rgba(255,255,255,.09);
+      --txt: rgba(255,255,255,.94);
+      --muted: rgba(255,255,255,.72);
+      --gold:#ffd54a;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; min-height:100vh; color:var(--txt);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(900px 700px at 30% 0%, #244a9a 0%, transparent 60%),
+                  radial-gradient(900px 700px at 90% 30%, #8a1f52 0%, transparent 55%),
+                  linear-gradient(160deg, #070a12, var(--bg));
+      display:flex; justify-content:center;
+    }
+    .phone{
+      width:min(430px, 100vw);
+      padding: 16px 14px 24px;
+    }
+    .card{
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 12px 30px rgba(0,0,0,.25);
+      backdrop-filter: blur(8px);
+      animation: pop .18s ease-out;
+    }
+    .title{font-size:22px; font-weight:900; letter-spacing:.3px}
+    .muted{color:var(--muted); font-size:12px}
+    label{display:block; font-size:12px; color:var(--muted); margin:12px 0 6px}
+    input{
+      width:100%;
+      padding:12px 12px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.18);
+      color:var(--txt);
+      outline:none;
+      font-size:16px;
+    }
+    .emojiGrid{
+      display:grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap:10px;
+      margin-top:10px;
+    }
+    .emojiBtn{
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.08);
+      padding:10px 0;
+      font-size:20px;
+      cursor:pointer;
+      transition: transform .08s ease, outline-color .08s ease;
+      outline: 2px solid transparent;
+    }
+    .emojiBtn:active{transform: scale(.98)}
+    .emojiBtn.sel{ outline-color: var(--gold); }
+
+    button{
+      cursor:pointer;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.08));
+      color:var(--txt);
+      padding:12px 12px;
+      font-weight:800;
+      width:100%;
+      margin-top:12px;
+      font-size:16px;
+    }
+    button.primary{
+      background: rgba(255,213,74,.18);
+      border-color: rgba(255,213,74,.35);
+    }
+
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px; border-radius:999px;
+      background: rgba(255,255,255,.10);
+      border: 1px solid rgba(255,255,255,.14);
+      font-size:12px;
+    }
+    .center{display:grid; place-items:center; text-align:center}
+    .big{font-size:28px; font-weight:1000}
+
+    .shake{animation: shake .22s ease-in-out}
+    @keyframes pop{from{transform:scale(.98); opacity:.6}to{transform:scale(1); opacity:1}}
+    @keyframes shake{
+      0%{transform:translateX(0)}
+      25%{transform:translateX(-6px)}
+      50%{transform:translateX(6px)}
+      75%{transform:translateX(-4px)}
+      100%{transform:translateX(0)}
+    }
+
+    /* Schneeflocken (super simpel) */
+    .snow{position:fixed; inset:0; pointer-events:none; opacity:.55}
+  </style>
+</head>
+<body>
+  <canvas class="snow" id="snow"></canvas>
+
+  <div class="phone">
+
+    <!-- LOBBY SETUP -->
+    <div class="card" id="setupCard">
+      <div class="title">🎄 Weihnachts-Quiz</div>
+      <div class="muted">Spieler-Ansicht (Handy)</div>
+
+      <label>Dein Name</label>
+      <input id="name" placeholder="z.B. Ben" maxlength="18" />
+
+      <label>Dein Emoji</label>
+      <div class="emojiGrid" id="emojiGrid"></div>
+
+      <button class="primary" id="btnJoin">Beitreten</button>
+
+      <div class="muted" style="margin-top:10px">
+        Danach wartest du in der Lobby, bis der Admin startet.
+      </div>
+    </div>
+
+    <!-- WAITING -->
+<div class="card center" id="waitingCard" style="display:none">
+  <div class="pill">✅ Du bist drin</div>
+  <div class="big" style="margin-top:10px">Gleich geht’s los…</div>
+  <div class="muted" style="margin-top:8px">
+    Bitte seite offen lassen 😊
+  </div>
+
+  <div class="pill" id="roomLabel" style="margin-top:14px; display:none;">Raum: —</div>
+  <div class="pill" style="margin-top:14px" id="meLabel">—</div>
+
+  <button id="startBtn" class="primary" style="display:none;" onclick="enterFullscreen()">
+    ▶ Quiz starten (Vollbild)
+  </button>
+</div>
+
+<!-- QUESTION -->
+<div class="card" id="questionCard" style="display:none">
+  <div class="pill" id="statusText">Warte auf Frage…</div>
+  <h2 id="questionText" style="margin:12px 0 0 0;">—</h2>
+
+  <div class="emojiGrid" style="margin-top:12px; grid-template-columns: 1fr 1fr;">
+    <button class="answerBtn">A</button>
+    <button class="answerBtn">B</button>
+    <button class="answerBtn">C</button>
+    <button class="answerBtn">D</button>
+  </div>
+
+  <div class="muted" style="margin-top:10px">Tippe eine Antwort.</div>
+</div>
+
+  </div>
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+<script>
+  const emojis = ["🎅","🤶","🧑‍🎄","🎄","⛄","❄️","🦌","🎁","🌟","🍪","🧦","🔔","🕯️","🥨","🍫"];
+
+  const grid = document.getElementById("emojiGrid");
+  let chosenEmoji = localStorage.getItem("chosenEmoji") || "🎄";
+const params = new URLSearchParams(location.search);
+const room = (params.get("room") || "").toUpperCase();
+
+if (room) {
+  const roomLabel = document.getElementById("roomLabel");
+  roomLabel.style.display = "inline-flex";
+  roomLabel.textContent = "Raum: " + room;
+  localStorage.setItem("roomCode", room);
+}
+
+  let chosenName  = localStorage.getItem("chosenName")  || "";
+
+  document.getElementById("name").value = chosenName;
+
+  function renderEmoji(){
+    grid.innerHTML = "";
+    emojis.forEach(e=>{
+      const b = document.createElement("button");
+      b.className = "emojiBtn" + (e===chosenEmoji ? " sel" : "");
+      b.type = "button";
+      b.textContent = e;
+      b.onclick = ()=>{ chosenEmoji = e; localStorage.setItem("chosenEmoji", chosenEmoji); renderEmoji(); };
+      grid.appendChild(b);
+    });
+  }
+  renderEmoji();
+
+  function showView(id){
+  ["setupCard","waitingCard","questionCard"].forEach(x=>{
+    document.getElementById(x).style.display = (x===id) ? "block" : "none";
+  });
+}
+
+function showQuestion(data){
+  showView("questionCard");
+
+  document.getElementById("statusText").textContent =
+    "Frage " + (data.index + 1);
+
+  document.getElementById("questionText").textContent = data.text;
+
+  const btns = document.querySelectorAll(".answerBtn");
+  btns.forEach((b, i) => {
+    b.textContent = (data.answers && data.answers[i]) ? data.answers[i] : "-";
+    b.disabled = false;
+  });
+}
+
+
+  document.getElementById("btnJoin").onclick = ()=>{
+    const name = document.getElementById("name").value.trim();
+    if(!name){
+      const card = document.getElementById("setupCard");
+      card.classList.add("shake");
+      setTimeout(()=>card.classList.remove("shake"), 240);
+      return;
+    }
+    chosenName = name;
+    localStorage.setItem("chosenName", chosenName);
+
+    document.getElementById("meLabel").textContent = `${chosenEmoji} ${chosenName}`;
+    showView("waitingCard");
+
+// --- local join list (nur lokal zum Testen) ---
+const roomFromUrl = (new URLSearchParams(location.search).get("room") || "").toUpperCase();
+if (roomFromUrl) {
+  const key = "players_" + roomFromUrl;
+  const list = JSON.parse(localStorage.getItem(key) || "[]");
+
+  const me = { name: chosenName, emoji: chosenEmoji, t: Date.now() };
+
+  // nicht doppelt rein (gleicher Name+Emoji)
+  const exists = list.some(p => p.name === me.name && p.emoji === me.emoji);
+  if (!exists) list.push(me);
+
+  localStorage.setItem(key, JSON.stringify(list));
+}
+
+  };
+
+  // Snow (simple)
+  (function snow(){
+    const c = document.getElementById("snow");
+    const ctx = c.getContext("2d");
+    let w,h,flakes=[];
+    function resize(){ w=c.width=window.innerWidth; h=c.height=window.innerHeight; }
+    window.addEventListener("resize", resize); resize();
+    for(let i=0;i<120;i++){
+      flakes.push({x:Math.random()*w,y:Math.random()*h,r:1+Math.random()*2.1,v:0.5+Math.random()*1.2,dx:-0.3+Math.random()*0.6});
+    }
+    function tick(){
+      ctx.clearRect(0,0,w,h);
+      ctx.globalAlpha=0.9;
+      for(const f of flakes){
+        f.y+=f.v; f.x+=f.dx;
+        if(f.y>h) f.y=-10;
+        if(f.x<-10) f.x=w+10;
+        if(f.x>w+10) f.x=-10;
+        ctx.beginPath();
+        ctx.arc(f.x,f.y,f.r,0,Math.PI*2);
+        ctx.fillStyle="white";
+        ctx.fill();
+      }
+      requestAnimationFrame(tick);
+    }
+    tick();
+  })();
+function enterFullscreen() {
+  const el = document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen();
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+}
+
+// Startsignal prüfen (kommt später von Admin via Live/Pusher)
+setInterval(() => {
+  const params = new URLSearchParams(location.search);
+  const room = (params.get("room") || "").toUpperCase();
+  if (!room) return;
+
+  const game = JSON.parse(localStorage.getItem("game_" + room) || "null");
+  if (game?.started) {
+    document.getElementById("startBtn").style.display = "block";
+  }
+}, 500);
+// --- LIVE (Pusher) ---
+const PUSHER_KEY = "3eb6d836f53aa7cc08c7";
+const PUSHER_CLUSTER = "eu";
+
+if (room) {
+  const pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
+  const channel = pusher.subscribe("room-" + room);
+
+  channel.bind("question", (data) => {
+    // data soll eine Frage enthalten
+    showQuestion(data);
+  });
+}
+
+
+</script>
+</body>
+</html>
