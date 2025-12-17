@@ -279,6 +279,8 @@
     </div>
   </div>
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+
 
   <script>
     const ADMIN_PASS = "1B2B3B";
@@ -484,42 +486,28 @@ async function pushQuestion() {
   const q = quiz.questions[currentIndex];
   if (!q) return alert("Keine (weitere) Frage vorhanden.");
 
-  await pushToRoom(roomCode, "question", {
-    index: currentIndex,
-    text: q.text,
-    answers: q.answers
+  const res = await fetch("/.netlify/functions/push-question", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      room: roomCode,
+      payload: {
+        index: currentIndex,
+        text: q.text,
+        answers: q.answers
+      }
+    })
   });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    alert("Push Fehler: " + text);
+  } else {
+    document.getElementById("status").textContent = "Live gesendet ✅";
+  }
 }
 
-
-const PUSHER_KEY = "DEIN_PUSHER_KEY";
-const PUSHER_CLUSTER = "DEIN_CLUSTER";
-
-const url = new URL(location.href);
-const room = url.searchParams.get("room");
-
-// Pusher verbinden
-const pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
-const channel = pusher.subscribe("room-" + room);
-
-// Event "question" empfangen
-channel.bind("question", (data) => {
-  showQuestion(data);
-});
-
-function showQuestion(data){
-  // Minimal-UI: du kannst es hübsch machen
-  document.querySelector("#statusText").textContent = "Frage " + (data.index+1);
-  document.querySelector("#questionText").textContent = data.text;
-
-  const btns = document.querySelectorAll(".answerBtn");
-  btns.forEach((b,i)=>{
-    b.textContent = data.answers[i] || "-";
-    b.disabled = false;
-  });
-}
-
-  </script>
-<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+</script>
 </body>
 </html>
