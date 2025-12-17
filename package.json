@@ -1,0 +1,8 @@
+{
+  "name": "weihnachts-quiz",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "pusher": "^5.2.0"
+  }
+}
