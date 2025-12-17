@@ -1,0 +1,36 @@
+const Pusher = require("pusher");
+
+exports.handler = async (event) => {
+  try {
+    if (event.httpMethod !== "POST") {
+      return { statusCode: 405, body: "Method Not Allowed" };
+    }
+
+    const body = JSON.parse(event.body || "{}");
+    const { room, payload } = body;
+
+    if (!room || !payload) {
+      return { statusCode: 400, body: "Missing room or payload" };
+    }
+
+    const pusher = new Pusher({
+      appId: process.env.PUSHER_APP_ID,
+      key: process.env.PUSHER_KEY,
+      secret: process.env.PUSHER_SECRET,
+      cluster: process.env.PUSHER_CLUSTER,
+      useTLS: true,
+    });
+
+    await pusher.trigger(`room-${room}`, "question", payload);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true }),
+    };
+  } catch (e) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ ok: false, error: String(e) }),
+    };
+  }
+};
