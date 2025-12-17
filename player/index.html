@@ -223,6 +223,16 @@ function showQuestion(data){
     b.textContent = (data?.answers && data.answers[i]) ? data.answers[i] : "-";
     b.disabled = false;
   });
+  // Klick-Handler setzen (A/B/C/D)
+  const letters = ["A","B","C","D"];
+  btns.forEach((b, i) => {
+    b.onclick = () => {
+      sendAnswer(letters[i]);          // Antwort senden
+      btns.forEach(x => x.disabled = true); // danach sperren
+      document.getElementById("statusText").textContent = "✅ Antwort gesendet";
+    };
+  });
+
 }
 
 
@@ -312,7 +322,22 @@ if (room) {
   channel.bind("question", (data) => {
     // data soll eine Frage enthalten
     showQuestion(data);
-  });
+  }); 
+function sendAnswer(letter){
+  const answerPayload = {
+    room,
+    name: chosenName || document.getElementById("name").value.trim() || "???",
+    emoji: chosenEmoji || "🎄",
+    letter, // "A","B","C","D"
+    t: Date.now()
+  };
+
+  fetch("/.netlify/functions/push-answer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ room, answer: answerPayload })
+  }).catch(()=>{});
+}
 }
 
 
