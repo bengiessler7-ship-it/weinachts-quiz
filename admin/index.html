@@ -249,7 +249,12 @@
   <h3>🔑 Raum erstellen
 <div class="card">
   <h3>👥 Beigetretene Spieler</h3>
-  <div class="small">Raum: <b id="adminRoomNow">—</b></div>
+<div class="card">
+  <h3>📨 Antworten (live)</h3>
+  <div class="small">Raum: <b id="ansRoom">—</b></div>
+  <div class="list" id="ansList" style="margin-top:10px"></div>
+</div>
+<div class="small">Raum: <b id="adminRoomNow">—</b></div>
   <div class="list" id="playerList" style="margin-top:10px"></div>
   <div class="small" style="margin-top:10px">
     (Lokal-Test: öffne Player in einem neuen Fenster / Inkognito und joine.)
@@ -315,6 +320,37 @@ function pollPlayers(){
       div.innerHTML = `<div><b>${p.emoji} ${escapeHtml(p.name)}</b></div>`;
       box.appendChild(div);
     });
+const PUBLIC_PUSHER_KEY = "3eb6d836f53aa7cc08c7";
+const PUBLIC_PUSHER_CLUSTER = "eu";
+
+let adminPusher = null;
+let adminChannel = null;
+
+function subscribeAnswers(room){
+  document.getElementById("ansRoom").textContent = room;
+
+  if (!adminPusher) {
+    adminPusher = new Pusher(PUBLIC_PUSHER_KEY, { cluster: PUBLIC_PUSHER_CLUSTER });
+  }
+
+  if (adminChannel) {
+    adminChannel.unbind_all();
+    adminPusher.unsubscribe(adminChannel.name);
+  }
+
+  adminChannel = adminPusher.subscribe("room-" + room);
+
+  adminChannel.bind("answer", (a) => {
+    const box = document.getElementById("ansList");
+    const div = document.createElement("div");
+    div.className = "qItem";
+    div.innerHTML = `<div><b>${a.emoji || "🎄"} ${escapeHtml(a.name || "??")}</b>
+      <div class="small">Antwort: <b>${escapeHtml(a.letter || "?")}</b></div>
+    </div>`;
+    box.prepend(div);
+  });
+}
+
 }
 
 setInterval(pollPlayers, 500);
@@ -439,7 +475,9 @@ document.getElementById("adminRoomNow").textContent = currentRoom;
   let url;
   if (location.protocol === "file:") {
     url = "PLAYER-LINK (online): /player/index.html?room=" + code;
-  } else {
+    subscribeAnswers(currentRoom);
+  subscribeAnswers(currentRoom);
+} else {
     url = location.origin + "/player/index.html?room=" + code;
   }
 
