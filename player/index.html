@@ -206,19 +206,21 @@ if (room) {
   });
 }
 
-function showQuestion(data)
-document.getElementById("statusText").textContent = "📡 Frage empfangen!";
-{
+function showQuestion(data){
   showView("questionCard");
 
-  document.getElementById("statusText").textContent =
-    "Frage " + (data.index + 1);
+  // Debug (optional)
+  document.getElementById("statusText").textContent = "📡 Frage empfangen!";
 
-  document.getElementById("questionText").textContent = data.text;
+  // echte Anzeige
+  document.getElementById("statusText").textContent =
+    "Frage " + ((data?.index ?? 0) + 1);
+
+  document.getElementById("questionText").textContent = data?.text || "—";
 
   const btns = document.querySelectorAll(".answerBtn");
   btns.forEach((b, i) => {
-    b.textContent = (data.answers && data.answers[i]) ? data.answers[i] : "-";
+    b.textContent = (data?.answers && data.answers[i]) ? data.answers[i] : "-";
     b.disabled = false;
   });
 }
