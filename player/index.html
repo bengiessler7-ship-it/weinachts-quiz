@@ -171,6 +171,10 @@
   let chosenEmoji = localStorage.getItem("chosenEmoji") || "🎄";
 const params = new URLSearchParams(location.search);
 const room = (params.get("room") || "").toUpperCase();
+if (!room) {
+  alert("Fehlt: ?room=CODE im Link");
+}
+
 
 if (room) {
   const roomLabel = document.getElementById("roomLabel");
@@ -202,7 +206,9 @@ if (room) {
   });
 }
 
-function showQuestion(data){
+function showQuestion(data)
+document.getElementById("statusText").textContent = "📡 Frage empfangen!";
+{
   showView("questionCard");
 
   document.getElementById("statusText").textContent =
