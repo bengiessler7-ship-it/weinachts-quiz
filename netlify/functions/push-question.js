@@ -7,7 +7,7 @@ exports.handler = async (event) => {
     }
 
     const body = JSON.parse(event.body || "{}");
-    const { room, payload } = body;
+    const { room, payload, event: eventName } = body;
 
     if (!room || !payload) {
       return { statusCode: 400, body: "Missing room or payload" };
@@ -21,16 +21,10 @@ exports.handler = async (event) => {
       useTLS: true,
     });
 
-    await pusher.trigger(`room-${room}`, "question", payload);
+    await pusher.trigger(`room-${room}`, eventName || "question", payload);
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ ok: true }),
-    };
+    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
   } catch (e) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ ok: false, error: String(e) }),
-    };
+    return { statusCode: 500, body: JSON.stringify({ ok: false, error: String(e) }) };
   }
 };
