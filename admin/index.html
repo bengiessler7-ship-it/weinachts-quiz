@@ -245,40 +245,42 @@
           Export ist praktisch als Backup. (Wir bauen später "Raum erstellen + QR".)
         </div>
       </div>
+<!-- 1) Raum erstellen -->
 <div class="card">
-  <h3>🔑 Raum erstellen
-<div class="card">
-  <h3>👥 Beigetretene Spieler</h3>
-<div class="card">
-  <h3>📨 Antworten (live)</h3>
-  <div class="small">Raum: <b id="ansRoom">—</b></div>
-  <div class="list" id="ansList" style="margin-top:10px"></div>
-</div>
-<div class="small">Raum: <b id="adminRoomNow">—</b></div>
-  <div class="list" id="playerList" style="margin-top:10px"></div>
-  <div class="small" style="margin-top:10px">
-    (Lokal-Test: öffne Player in einem neuen Fenster / Inkognito und joine.)
-  </div>
-</div>
-</h3>
+  <h3>🔑 Raum erstellen</h3>
 
   <button onclick="createRoom()">Neuen Raum erstellen</button>
-<button class="miniBtn" style="margin-top:10px;" onclick="startGame()">
-  ▶ Quiz starten
-</button>
 
+  <button class="miniBtn" style="margin-top:10px;" onclick="startGame()">
+    ▶ Quiz starten
+  </button>
 
   <div class="small" style="margin-top:10px">
-    Raumcode:
-    <b id="roomCode">—</b>
+    Raumcode: <b id="roomCode">—</b>
   </div>
 
   <div id="qrWrap" style="margin-top:12px; display:none; text-align:center">
     <canvas id="qr"></canvas>
-    <div class="small" style="margin-top:6px">
-      Spieler scannen den QR-Code
-    </div>
+    <div class="small" style="margin-top:6px">Spieler scannen den QR-Code</div>
   </div>
+</div>
+
+<!-- 2) Spieler -->
+<div class="card">
+  <h3>👥 Beigetretene Spieler</h3>
+  <div class="small">Raum: <b id="adminRoomNow">—</b></div>
+  <div class="list" id="playerList" style="margin-top:10px"></div>
+
+  <div class="small" style="margin-top:10px">
+    (Tipp: Player-Link im Handy öffnen und beitreten.)
+  </div>
+</div>
+
+<!-- 3) Antworten -->
+<div class="card">
+  <h3>📨 Antworten (live)</h3>
+  <div class="small">Raum: <b id="ansRoom">—</b></div>
+  <div class="list" id="ansList" style="margin-top:10px"></div>
 </div>
 
     </div>
@@ -287,273 +289,352 @@
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 
 
-  <script>
-    const ADMIN_PASS = "1B2B3B";
+<script>
+  const ADMIN_PASS = "1B2B3B";
 
-    // Quiz-Daten lokal (später via Pusher live)
-    let currentRoom = null;
+  // Pusher Public (nur hören)
+  const PUBLIC_PUSHER_KEY = "3eb6d836f53aa7cc08c7";
+  const PUBLIC_PUSHER_CLUSTER = "eu";
 
-// Quiz-Daten lokal (später via Pusher live)
-let quiz = loadLocal("quiz") || { title: "Hauptquiz", questions: [] };
+  let quiz = loadLocal("quiz") || { title: "Hauptquiz", questions: [] };
 
+  let currentRoom = null;
+  let roomCode = null;
+  let currentIndex = 0;
 
-function pollPlayers(){
-  const box = document.getElementById("playerList");
-  if (!currentRoom) {
-    box.innerHTML = `<div class="small">Noch kein Raum erstellt.</div>`;
-    return;
+  // live state
+  let adminPusher = null;
+  let adminChannel = null;
+
+  const players = new Map();   // id -> {id,name,emoji,t}
+  const answers = new Map();   // id -> {id,letter,t,name,emoji,index}
+  const scores  = new Map();   // id -> number
+
+  let accepting = false;
+
+  function $(id){ return document.getElementById(id); }
+
+  function login() {
+    const code = $("code").value.trim();
+    if (code === ADMIN_PASS) {
+      $("error").style.display = "none";
+      $("loginView").style.display = "none";
+      $("dashView").style.display = "block";
+      toggleFullscreen();
+      renderQuestions();
+    } else {
+      $("error").style.display = "block";
+    }
   }
-  const key = "players_" + currentRoom;
-  const list = JSON.parse(localStorage.getItem(key) || "[]");
 
-  if (list.length === 0) {
-    box.innerHTML = `<div class="small">Noch niemand beigetreten.</div>`;
-    return;
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
   }
 
-  box.innerHTML = "";
-  list
-    .sort((a,b)=>a.t-b.t)
-    .forEach(p=>{
+  function addQuestion(){
+    const text = $("qText").value.trim();
+    const answersArr = [ $("a0").value.trim(), $("a1").value.trim(), $("a2").value.trim(), $("a3").value.trim() ];
+    const correct = Number($("correct").value);
+
+    if(!text) return alert("Bitte eine Frage eingeben.");
+    if(answersArr.some(a => !a)) return alert("Bitte alle 4 Antworten ausfüllen.");
+    if(Number.isNaN(correct) || correct < 0 || correct > 3) return alert("Correct muss 0-3 sein.");
+
+    quiz.questions.push({ text, answers: answersArr, correct });
+    saveLocal("quiz", quiz);
+    clearForm();
+    renderQuestions();
+  }
+
+  function removeQuestion(idx){
+    quiz.questions.splice(idx, 1);
+    saveLocal("quiz", quiz);
+    renderQuestions();
+  }
+
+  function clearForm(){
+    $("qText").value = "";
+    $("a0").value = "";
+    $("a1").value = "";
+    $("a2").value = "";
+    $("a3").value = "";
+    $("correct").value = "0";
+  }
+
+  function renderQuestions(){
+    $("qCount").textContent = quiz.questions.length;
+    const list = $("qList");
+    list.innerHTML = "";
+
+    if(quiz.questions.length === 0){
+      list.innerHTML = `<div class="small">Noch keine Fragen. Füge links eine hinzu.</div>`;
+      return;
+    }
+
+    quiz.questions.forEach((q, idx)=>{
       const div = document.createElement("div");
       div.className = "qItem";
-      div.innerHTML = `<div><b>${p.emoji} ${escapeHtml(p.name)}</b></div>`;
+      div.innerHTML = `
+        <div>
+          <b>${escapeHtml(q.text)}</b>
+          <div class="small">Richtig: ${["A","B","C","D"][q.correct]}</div>
+        </div>
+        <button class="miniBtn danger" onclick="removeQuestion(${idx})">Löschen</button>
+      `;
+      list.appendChild(div);
+    });
+  }
+
+  function exportQuiz(){
+    const data = JSON.stringify(quiz, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "quiz-export.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function resetAll(){
+    if(!confirm("Wirklich ALLES löschen?")) return;
+    quiz = { title: "Hauptquiz", questions: [] };
+    saveLocal("quiz", quiz);
+    renderQuestions();
+  }
+
+  function createRoom(){
+    const code = Math.random().toString(36).substring(2,8).toUpperCase();
+    roomCode = code;
+    currentRoom = code;
+
+    $("roomCode").textContent = code;
+    const roomNow = $("adminRoomNow");
+    if (roomNow) roomNow.textContent = code;
+
+    const url = location.origin + "/player/index.html?room=" + code;
+
+    new QRious({
+      element: $("qr"),
+      value: url,
+      size: 220,
+      background: "white",
+      foreground: "#000"
+    });
+
+    $("qrWrap").style.display = "block";
+
+    // UI reset
+    players.clear();
+    answers.clear();
+    scores.clear();
+    $("playerList").innerHTML = `<div class="small">Warte auf Spieler…</div>`;
+    const ansList = $("ansList");
+    if (ansList) ansList.innerHTML = `<div class="small">Noch keine Antworten…</div>`;
+    const ansRoom = $("ansRoom");
+    if (ansRoom) ansRoom.textContent = code;
+
+    subscribeRoom(code);
+    $("status").textContent = "Raum bereit ✅";
+  }
+
+  function subscribeRoom(room){
+    if (!adminPusher) adminPusher = new Pusher(PUBLIC_PUSHER_KEY, { cluster: PUBLIC_PUSHER_CLUSTER });
+
+    if (adminChannel) {
+      adminChannel.unbind_all();
+      adminPusher.unsubscribe(adminChannel.name);
+    }
+
+    adminChannel = adminPusher.subscribe("room-" + room);
+
+    // JOIN
+    adminChannel.bind("join", (p) => {
+      const id = p?.id || (p?.name || "") + "|" + (p?.emoji || "");
+      players.set(id, { ...p, id });
+      if (!scores.has(id)) scores.set(id, 0);
+      renderPlayers();
+    });
+
+    // ANSWER
+    adminChannel.bind("answer", (a) => {
+      if (!accepting) return;
+      if (!a || a.index !== currentIndex) return;
+
+      const id = a?.id || (a?.name || "") + "|" + (a?.emoji || "");
+      if (answers.has(id)) return; // nur 1 Antwort pro Frage
+
+      answers.set(id, { ...a, id });
+      renderAnswersLine(a);
+    });
+  }
+
+  function renderPlayers(){
+    const box = $("playerList");
+    const list = [...players.values()].sort((x,y)=>(x.t||0)-(y.t||0));
+    if (list.length === 0) {
+      box.innerHTML = `<div class="small">Noch niemand beigetreten.</div>`;
+      return;
+    }
+    box.innerHTML = "";
+    list.forEach(pl=>{
+      const div = document.createElement("div");
+      div.className = "qItem";
+      div.innerHTML = `<div><b>${pl.emoji || "🎄"} ${escapeHtml(pl.name || "??")}</b></div>`;
       box.appendChild(div);
     });
-const PUBLIC_PUSHER_KEY = "3eb6d836f53aa7cc08c7";
-const PUBLIC_PUSHER_CLUSTER = "eu";
-
-let adminPusher = null;
-let adminChannel = null;
-
-function subscribeAnswers(room){
-  document.getElementById("ansRoom").textContent = room;
-
-  if (!adminPusher) {
-    adminPusher = new Pusher(PUBLIC_PUSHER_KEY, { cluster: PUBLIC_PUSHER_CLUSTER });
   }
 
-  if (adminChannel) {
-    adminChannel.unbind_all();
-    adminPusher.unsubscribe(adminChannel.name);
-  }
-
-  adminChannel = adminPusher.subscribe("room-" + room);
-
-  adminChannel.bind("answer", (a) => {
-    const box = document.getElementById("ansList");
+  function renderAnswersLine(a){
+    const box = $("ansList");
+    if (!box) return;
+    if (box.innerHTML.includes("Noch keine Antworten")) box.innerHTML = "";
     const div = document.createElement("div");
     div.className = "qItem";
     div.innerHTML = `<div><b>${a.emoji || "🎄"} ${escapeHtml(a.name || "??")}</b>
       <div class="small">Antwort: <b>${escapeHtml(a.letter || "?")}</b></div>
     </div>`;
     box.prepend(div);
-  });
-}
-
-}
-
-setInterval(pollPlayers, 500);
-loadLocal("quiz") || { title: "Hauptquiz", questions: [] };
-
-    function login() {
-      const code = document.getElementById("code").value.trim();
-      if (code === ADMIN_PASS) {
-        document.getElementById("error").style.display = "none";
-        document.getElementById("loginView").style.display = "none";
-        document.getElementById("dashView").style.display = "block";
-
-toggleFullscreen();
-        render();
-      } else {
-        document.getElementById("error").style.display = "block";
-      }
-    }
-function toggleFullscreen() {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen();
-  } else {
-    document.exitFullscreen();
   }
-}
 
-    function addQuestion(){
-      const text = document.getElementById("qText").value.trim();
-      const answers = [
-        document.getElementById("a0").value.trim(),
-        document.getElementById("a1").value.trim(),
-        document.getElementById("a2").value.trim(),
-        document.getElementById("a3").value.trim(),
-      ];
-      const correct = Number(document.getElementById("correct").value);
+  async function startGame(){
+    if (!currentRoom) return alert("Bitte erst einen Raum erstellen!");
+    const res = await fetch("/.netlify/functions/push-start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room: currentRoom })
+    });
+    if (!res.ok) return alert("Start Fehler");
+    $("status").textContent = "Quiz gestartet ✅ (Player können starten)";
+  }
 
-      if(!text) return alert("Bitte eine Frage eingeben.");
-      if(answers.some(a => !a)) return alert("Bitte alle 4 Antworten ausfüllen.");
-      if(Number.isNaN(correct) || correct < 0 || correct > 3) return alert("Correct muss 0-3 sein.");
+  async function startQuiz(){
+    if (!roomCode) return alert("Erst 'Neuen Raum erstellen' drücken!");
+    if (quiz.questions.length === 0) return alert("Bitte erst Fragen anlegen.");
 
-      quiz.questions.push({ text, answers, correct });
-      saveLocal("quiz", quiz);
-      clearForm();
-      render();
+    currentIndex = 0;
+    await sendQuestion();
+  }
+
+  async function nextQuestion(){
+    if (!roomCode) return alert("Erst 'Neuen Raum erstellen' drücken!");
+    if (!accepting) {
+      // falls gerade keine Frage aktiv, einfach nächste senden
+      currentIndex = Math.min(currentIndex, quiz.questions.length-1);
+      await sendQuestion();
+      return;
     }
 
-    function removeQuestion(idx){
-      quiz.questions.splice(idx, 1);
-      saveLocal("quiz", quiz);
-      render();
+    // 🔒 Frage beenden -> Punkte verteilen -> Rangliste -> nächste Frage (wie Kahoot)
+    await closeQuestionAndMaybeAdvance();
+  }
+
+  async function sendQuestion(){
+    const q = quiz.questions[currentIndex];
+    if (!q) return alert("Keine (weitere) Frage vorhanden.");
+
+    accepting = true;
+    answers.clear();
+
+    const payload = {
+      index: currentIndex,
+      text: q.text,
+      answers: q.answers,
+      t: Date.now()
+    };
+
+    const res = await fetch("/.netlify/functions/push-question", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room: roomCode, event: "question", payload })
+    });
+
+    if (!res.ok) {
+      const t = await res.text();
+      return alert("Push Fehler: " + t);
     }
 
-    function clearForm(){
-      document.getElementById("qText").value = "";
-      document.getElementById("a0").value = "";
-      document.getElementById("a1").value = "";
-      document.getElementById("a2").value = "";
-      document.getElementById("a3").value = "";
-      document.getElementById("correct").value = "0";
+    $("status").textContent = `Frage ${currentIndex+1} live ✅ (Antworten offen)`;
+    const ansList = $("ansList");
+    if (ansList) ansList.innerHTML = `<div class="small">Antworten laufen…</div>`;
+  }
+
+  async function closeQuestionAndMaybeAdvance(){
+    accepting = false;
+
+    const q = quiz.questions[currentIndex];
+    const correctLetter = ["A","B","C","D"][q.correct];
+
+    // richtige Antworten sortiert nach Zeit
+    const correctOnes = [...answers.values()]
+      .filter(a => a.letter === correctLetter)
+      .sort((a,b)=>(a.t||0)-(b.t||0));
+
+    const delta = {}; // id -> add
+    correctOnes.forEach((a, idx)=>{
+      const add = (idx === 0) ? 3 : (idx === 1) ? 2 : 1;
+      delta[a.id] = (delta[a.id] || 0) + add;
+    });
+
+    // scores updaten
+    for (const [id, pl] of players.entries()){
+      const old = scores.get(id) || 0;
+      const add = delta[id] || 0;
+      scores.set(id, old + add);
     }
 
-    function render(){
-      document.getElementById("qCount").textContent = quiz.questions.length;
+    // Topliste
+    const top = [...players.values()]
+      .map(p => ({ id: p.id, name: p.name, emoji: p.emoji, score: scores.get(p.id) || 0 }))
+      .sort((a,b)=>b.score-a.score)
+      .slice(0, 10);
 
-      const list = document.getElementById("qList");
-      list.innerHTML = "";
+    // Ergebnis an Player senden (für richtig/falsch + leaderboard)
+    const payload = {
+      index: currentIndex,
+      correctLetter,
+      delta,
+      top,
+      t: Date.now(),
+      isFinal: (currentIndex === quiz.questions.length - 1)
+    };
 
-      if(quiz.questions.length === 0){
-        list.innerHTML = `<div class="small">Noch keine Fragen. Füge links eine hinzu.</div>`;
-        return;
-      }
+    await fetch("/.netlify/functions/push-question", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room: roomCode, event: "result", payload })
+    });
 
-      quiz.questions.forEach((q, idx)=>{
-        const div = document.createElement("div");
-        div.className = "qItem";
-        div.innerHTML = `
-          <div>
-            <b>${escapeHtml(q.text)}</b>
-            <div class="small">Richtig: ${["A","B","C","D"][q.correct]}</div>
-          </div>
-          <button class="miniBtn danger" onclick="removeQuestion(${idx})">Löschen</button>
-        `;
-        list.appendChild(div);
+    $("status").textContent = `Auswertung gesendet ✅`;
+
+    // Finale Top 3 schicken (nach letzter Frage)
+    if (payload.isFinal) {
+      const top3 = top.slice(0,3);
+      await fetch("/.netlify/functions/push-question", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room: roomCode, event: "final", payload: { top3, t: Date.now() } })
       });
+      $("status").textContent = "Finale Top 3 gesendet 🏆";
+      return;
     }
 
-    function exportQuiz(){
-      const data = JSON.stringify(quiz, null, 2);
-      const blob = new Blob([data], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "quiz-export.json";
-      a.click();
-
-      URL.revokeObjectURL(url);
-    }
-
-    function resetAll(){
-      if(!confirm("Wirklich ALLES löschen?")) return;
-      quiz = { title: "Hauptquiz", questions: [] };
-      saveLocal("quiz", quiz);
-      render();
-    }
-
-    function saveLocal(key, val){
-      localStorage.setItem(key, JSON.stringify(val));
-    }
-    function loadLocal(key){
-      try { return JSON.parse(localStorage.getItem(key)); }
-      catch { return null; }
-    }
-   function createRoom(){
-  const code = Math.random().toString(36).substring(2,8).toUpperCase();
-roomCode = code;
-  document.getElementById("roomCode").textContent = code;
-currentRoom = code;
-document.getElementById("adminRoomNow").textContent = currentRoom;
-
-
-  let url;
-  if (location.protocol === "file:") {
-    url = "PLAYER-LINK (online): /player/index.html?room=" + code;
-    subscribeAnswers(currentRoom);
-  subscribeAnswers(currentRoom);
-} else {
-    url = location.origin + "/player/index.html?room=" + code;
+    // automatisch nach kurzer Zeit nächste Frage senden
+    setTimeout(async () => {
+      currentIndex++;
+      await sendQuestion();
+    }, 4500);
   }
 
-  new QRious({
-    element: document.getElementById("qr"),
-    value: url,
-    size: 220,
-    background: "white",
-    foreground: "#000"
-  });
+  function saveLocal(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+  function loadLocal(key){ try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
 
-  document.getElementById("qrWrap").style.display = "block";
-}
-
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, m => ({
-    "&":"&amp;",
-    "<":"&lt;",
-    ">":"&gt;",
-    '"':"&quot;",
-    "'":"&#39;"
-  }[m]));
-} async function startGame(){
-  if (!currentRoom) return alert("Bitte erst einen Raum erstellen!");
-
-  const res = await fetch("/.netlify/functions/push-start", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ room: currentRoom })
-  });
-
-  if (!res.ok) return alert("Start Fehler");
-  alert("✅ Start gesendet (live)");
-}
-
-let roomCode = null;
-let currentIndex = 0;
-
-async function startQuiz() {
-  if (!roomCode) return alert("Erst 'Neuen Raum erstellen' drücken!");
-  currentIndex = 0;
-  await pushQuestion();
-}
-
-async function nextQuestion() {
-  if (!roomCode) return alert("Erst 'Neuen Raum erstellen' drücken!");
-  currentIndex++;
-  await pushQuestion();
-}
-
-async function pushQuestion() {
-  const q = quiz.questions[currentIndex];
-  if (!q) return alert("Keine (weitere) Frage vorhanden.");
-
-  const res = await fetch("/.netlify/functions/push-question", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      room: roomCode,
-      payload: {
-        index: currentIndex,
-        text: q.text,
-        answers: q.answers
-      }
-    })
-  });
-
-  const text = await res.text();
-
-  if (!res.ok) {
-    alert("Push Fehler: " + text);
-  } else {
-    document.getElementById("status").textContent = "Live gesendet ✅";
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[m]));
   }
-}
-
 </script>
 </body>
 </html>
