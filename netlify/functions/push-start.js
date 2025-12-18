@@ -2,10 +2,14 @@ const Pusher = require("pusher");
 
 exports.handler = async (event) => {
   try {
-    if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
+    if (event.httpMethod !== "POST") {
+      return { statusCode: 405, body: "Method Not Allowed" };
+    }
 
     const { room } = JSON.parse(event.body || "{}");
-    if (!room) return { statusCode: 400, body: "Missing room" };
+    if (!room) {
+      return { statusCode: 400, body: "Missing room" };
+    }
 
     const pusher = new Pusher({
       appId: process.env.PUSHER_APP_ID,
