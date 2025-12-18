@@ -500,11 +500,19 @@ function escapeHtml(s){
     '"':"&quot;",
     "'":"&#39;"
   }[m]));
-} function startGame(){
+} async function startGame(){
   if (!currentRoom) return alert("Bitte erst einen Raum erstellen!");
-  localStorage.setItem("game_" + currentRoom, JSON.stringify({ started: true, t: Date.now() }));
-  alert("Startsignal gesendet ✅");
+
+  const res = await fetch("/.netlify/functions/push-start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ room: currentRoom })
+  });
+
+  if (!res.ok) return alert("Start Fehler");
+  alert("✅ Start gesendet (live)");
 }
+
 let roomCode = null;
 let currentIndex = 0;
 
