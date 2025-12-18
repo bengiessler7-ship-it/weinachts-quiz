@@ -248,7 +248,20 @@ function showQuestion(data){
     localStorage.setItem("chosenName", chosenName);
 
     document.getElementById("meLabel").textContent = `${chosenEmoji} ${chosenName}`;
-    showView("waitingCard");
+    showView("waitingCard"); // ✅ LIVE Join an Admin senden (über Netlify Function)
+fetch("/.netlify/functions/push-join", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    room,
+    player: {
+      name: chosenName,
+      emoji: chosenEmoji,
+      t: Date.now()
+    }
+  })
+}).catch(() => {});
+
 
 // --- local join list (nur lokal zum Testen) ---
 const roomFromUrl = (new URLSearchParams(location.search).get("room") || "").toUpperCase();
@@ -317,7 +330,10 @@ const PUSHER_CLUSTER = "eu";
 
 if (room) {
   const pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
-  const channel = pusher.subscribe("room-" + room);
+  const channel = pusher.subscribe("room-" + room); 
+  channel.bind("start", () => {
+  document.getElementById("startBtn").style.display = "block";
+});
 
   channel.bind("question", (data) => {
     // data soll eine Frage enthalten
